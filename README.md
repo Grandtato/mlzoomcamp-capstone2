@@ -2,60 +2,90 @@
 
 ## 📌 Problem Statement
 In modern software development, **Continuous Integration (CI)** failures are costly bottlenecks. When a developer pushes code that breaks the build:
-1.  **Productivity Drops:** The entire team is blocked from merging until the build is fixed.
-2.  **Resource Waste:** CI runners (GitHub Actions, Jenkins) burn expensive compute time on doomed builds.
-3.  **Release Delays:** Critical hotfixes get stuck behind broken pipelines.
 
-**The Solution:**
-This project deploys a Machine Learning service that predicts the **probability of a CI failure** *before* the code is even run. By analyzing historical metadata (repository stability, author history, time of day, and retry patterns), we can flag "High Risk" commits for extra review or deprioritized testing.
+1. **Productivity drops:** teams get blocked from merging until the build is fixed  
+2. **Resource waste:** CI runners burn compute time on failing pipelines  
+3. **Release delays:** hotfixes and features get stuck behind broken pipelines
 
----
+### The Solution
+This project builds and deploys a Machine Learning service that predicts the **probability of a CI failure** *before* the workflow completes.  
+By learning from historical GitHub Actions runs (repository patterns, author patterns, time-of-day effects, and retry behavior), we can flag **high-risk runs** for extra review or early investigation.
+
 
 ## 🏗️ Project Architecture
-The solution follows a complete end-to-end ML pipeline:
-1.  **Data Collection:** Custom scrapers (`discover_repos.py` & `extract_runs.py`) fetch real-world CI history from the GitHub API.
-2.  **Data Analysis:** Exploratory Data Analysis (EDA) identifies key failure drivers (e.g., "fatigue pushes" late at night).
-3.  **Modeling:** Two models (Logistic Regression vs. Random Forest) were trained and compared to maximize AUC.
-4.  **Deployment:** The winning model is containerized with Docker and served via a Flask API.
+End-to-end ML pipeline:
 
----
+1. **Data Collection:** `discover_repos.py` + `extract_runs.py` fetch GitHub Actions history via the GitHub API  
+2. **EDA:** `notebook.ipynb` explores target imbalance and failure patterns  
+3. **Modeling:** Logistic Regression vs Random Forest + hyperparameter tuning (AUC comparison)  
+4. **Deployment:** Flask API (`app.py`) serves predictions; packaged in Docker (`Dockerfile`)
+
 
 ## 📊 Data Source
-I constructed a **custom dataset** specifically for this problem rather than using a pre-made CSV.
-- **Source:** GitHub REST API (Actions/Workflow Runs).
-- **Scope:** **144 Active Repositories** (including major open source projects like `huggingface`, `psf`, `tiangolo`).
-- **Volume:** **31,000+** CI Workflow Runs extracted.
-- **Target Variable:** `conclusion` (Success vs. Failure).
+I constructed a custom dataset (not a pre-made CSV):
 
----
+- **Source:** GitHub REST API (Actions / Workflow Runs)
+- **Scope:** ~144 active repositories (examples: `huggingface`, `psf`, `tiangolo`)
+- **Volume:** 31,000+ workflow runs
+- **Target:** `conclusion` mapped to `target` (0=success, 1=failure)
+
+
+
+## 📈 EDA Highlights (Notebook)
+The dataset is **imbalanced** (failures are the minority class), and failure probability varies by time-of-day (e.g., late-night hours show higher failure rate in some repos).
+
+Add these images to your repo under `images/` and update the links below:
+- `images/target_distribution.png`
+- `images/failure_by_hour.png`
+
+![Target distribution](images/target_distribution.png)  
+![Failure rate by hour](images/failure_by_hour.png)
+
+> Notebook: `notebook.ipynb`
+
 
 
 ## 🧠 Methodology & Model Training
-I trained multiple models and tuned their hyperparameters to satisfy the rigorous grading criteria.
 
-### 1. Feature Engineering
-- **Categorical:** `repository_name` (captures project complexity), `author_id` (captures developer patterns).
-- **Numerical:** `hour_of_day`, `day_of_week` (captures temporal risk factors), `run_attempt` (captures panic retries).
+### 1) Feature Engineering
+- **Categorical:** `repo`, `author`
+- **Numerical:** `hour`, `day_of_week`, `run_attempt`
 
-### 2. Model Selection & Tuning
-I compared Logistic Regression and Random Forest, systematically tuning hyperparameters for both.
+### 2) Model Selection
+Trained and compared:
+- **Logistic Regression (linear baseline)**
+- **Random Forest (tree-based challenger)**
 
-**Hyperparameter Tuning Results:**
-- **Random Forest:** Tuned `max_depth` over [5, 10, 15, 20].
-  - Best: **Depth 15** (AUC: 0.8498).
-- **Logistic Regression:** Tuned `C` (regularization) over [0.01, 0.1, 1.0, 10.0].
-  - Best: **C=10.0** (AUC: 0.8549).
+### 3) Hyperparameter Tuning (AUC on validation)
+- **Random Forest:** tuned `max_depth` over **[5, 10, 15, 20]**  
+  - Best: **max_depth = 15** (AUC ≈ **0.8498**)
+- **Logistic Regression:** tuned `C` over **[0.01, 0.1, 1.0, 10.0]**  
+  - Best: **C = 10.0** (AUC ≈ **0.8549**)
 
-**Final Verdict:**
-Logistic Regression outperformed Random Forest (0.8549 vs 0.8498). It was selected for production due to higher accuracy and faster inference speed.
----
+**Final model (production):** Logistic Regression (best AUC + fast inference)
 
-## 🚀 How to Run (Dockerized)
-This project is fully containerized for easy deployment on any machine.
 
-### Prerequisites
-- Docker Desktop (or Docker Engine) installed.
 
-### 1. Build the Image
+## 📦 Local Setup (venv)
+
 ```bash
-docker build -t capstone2-risk .
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+
+##☁️ Cloud Deployment (Google Cloud Run)
+
+Service URL:
+https://capstone2-risk-897828472012.us-central1.run.app
+
+Test it:
+
+curl -s -X POST "https://capstone2-risk-897828472012.us-central1.run.app/predict" \
+  -H "Content-Type: application/json" \
+  -d '{"repo":"DataTalksClub/machine-learning-zoomcamp","author":"someone","hour":21,"day_of_week":2,"run_attempt":1}'
+
+
+Example response:
+
+{"high_risk":false,"risk_score":0.07486680563799615}
