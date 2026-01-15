@@ -6,7 +6,7 @@ from sklearn.linear_model import LogisticRegression
 
 # Config
 OUTPUT_FILE = "model.bin"
-C_PARAM = 1.0
+C_PARAM = 10.0
 
 print("1. Loading data...")
 df = pd.read_csv("data/runs.csv")
